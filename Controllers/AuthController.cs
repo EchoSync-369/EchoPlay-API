@@ -1,65 +1,52 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Net.Http.Headers;
+using System.Text.Json;
+using System.Threading.Tasks;
 using EchoPlayAPI.Services;
 
 namespace EchoPlayAPI.Controllers
 {
-    [ApiController]
-    [Route("auth")]
+    [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
-        private readonly SpotifyService _spotifyService;
-        private readonly IConfiguration _configuration;
+        private readonly JWTService _jwtService;
 
-        public AuthController(SpotifyService spotifyService, IConfiguration configuration)
+        public AuthController(JWTService jwtService)
         {
-            _spotifyService = spotifyService;
-            _configuration = configuration;
+            _jwtService = jwtService;
         }
 
-        [HttpGet("spotify")]
-        public IActionResult InitiateSpotifyAuth()
+        [HttpPost("login")]
+        public async Task<IActionResult> GetSpotifyUserProfile([FromBody] TokenRequest request)
         {
-            var authUrl = _spotifyService.GetAuthorizationUrl();
-            return Redirect(authUrl);
+            if (string.IsNullOrEmpty(request?.Token))
+                return BadRequest("Token is required");
+
+            using var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", request.Token);
+            var response = await httpClient.GetAsync("https://api.spotify.com/v1/me");
+            if (!response.IsSuccessStatusCode)
+                return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+
+            var content = await response.Content.ReadAsStringAsync();
+            var json = JsonDocument.Parse(content).RootElement;
+
+            // Extract email from the Spotify user profile response
+            var email = json.GetProperty("email").GetString();
+            
+            if (string.IsNullOrEmpty(email))
+                return BadRequest("User email not found in Spotify profile");
+            
+            // Generate JWT token with the user's email
+            var jwtToken = _jwtService.GenerateToken(email);
+            
+            return Ok(new { profile = json, token = jwtToken });
         }
+        
+    }
 
-        [HttpGet("spotify/callback")]
-        public async Task<IActionResult> SpotifyCallback([FromQuery] string code, [FromQuery] string? error, [FromQuery] string? state)
-        {
-            var frontendUrl = _configuration["Frontend:BaseUrl"];
-
-            if (!string.IsNullOrEmpty(error))
-            {
-                return Redirect($"{frontendUrl}/auth/error?error={error}");
-            }
-
-            if (string.IsNullOrEmpty(code))
-            {
-                return Redirect($"{frontendUrl}/auth/error?error=no_code");
-            }
-
-            try
-            {
-                // Exchange code for tokens
-                var tokenResponse = await _spotifyService.ExchangeCodeForTokenAsync(code);
-                if (tokenResponse == null)
-                {
-                    return Redirect($"{frontendUrl}/auth/error?error=token_exchange_failed");
-                }
-
-                // Get user profile
-                var userProfile = await _spotifyService.GetUserProfileAsync(tokenResponse.access_token);
-                if (userProfile == null)
-                {
-                    return Redirect($"{frontendUrl}/auth/error?error=profile_fetch_failed");
-                }
-
-                return Redirect($"{frontendUrl}/auth/success?user={userProfile.display_name}");
-            }
-            catch (Exception ex)
-            {
-                return Redirect($"{frontendUrl}/auth/error?error=server_error");
-            }
-        }
+    public class TokenRequest
+    {
+        public required string Token { get; set; }
     }
 }
