@@ -3,6 +3,9 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading.Tasks;
 using EchoPlayAPI.Services;
+using EchoPlayAPI.Data;
+using EchoPlayAPI.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace EchoPlayAPI.Controllers
 {
@@ -10,10 +13,12 @@ namespace EchoPlayAPI.Controllers
     public class AuthController : ControllerBase
     {
         private readonly JWTService _jwtService;
+        private readonly AppDbContext _context;
 
-        public AuthController(JWTService jwtService)
+        public AuthController(JWTService jwtService, AppDbContext context)
         {
             _jwtService = jwtService;
+            _context = context;
         }
 
         [HttpPost("login")]
@@ -36,6 +41,20 @@ namespace EchoPlayAPI.Controllers
             
             if (string.IsNullOrEmpty(email))
                 return BadRequest("User email not found in Spotify profile");
+            
+            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+
+            if (existingUser == null)
+            {
+                // Create new user
+                var newUser = new User
+                {
+                    Email = email,
+                };
+
+                _context.Users.Add(newUser);
+                await _context.SaveChangesAsync();
+            }
             
             // Generate JWT token with the user's email
             var jwtToken = _jwtService.GenerateToken(email);

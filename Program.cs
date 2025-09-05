@@ -1,10 +1,13 @@
 using EchoPlayAPI.Services;
-
+using EchoPlayAPI.Data;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services
 builder.Services.AddControllers();
+
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -25,6 +28,9 @@ builder.Services.AddSingleton<JWTService>(provider =>
         audience: "EchoPlay-Client"
     );
 });
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 var app = builder.Build();
 
