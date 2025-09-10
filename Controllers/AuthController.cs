@@ -42,24 +42,25 @@ namespace EchoPlayAPI.Controllers
             if (string.IsNullOrEmpty(email))
                 return BadRequest("User email not found in Spotify profile");
             
-            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
 
-            if (existingUser == null)
+            if (user == null)
             {
                 // Create new user
-                var newUser = new User
+                user = new User
                 {
                     Email = email,
+                    IsAdmin = false // Set default value for new users
                 };
 
-                _context.Users.Add(newUser);
+                _context.Users.Add(user);
                 await _context.SaveChangesAsync();
             }
             
             // Generate JWT token with the user's email
             var jwtToken = _jwtService.GenerateToken(email);
             
-            return Ok(new { profile = json, token = jwtToken });
+            return Ok(new { IsAdmin = user.IsAdmin, profile = json, token = jwtToken });
         }
         
     }
