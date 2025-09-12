@@ -1,10 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>EchoPlay_API</RootNamespace>
+    <UserSecretsId>da99bd51-8d55-4ce2-a092-f7210c9fc41a</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
