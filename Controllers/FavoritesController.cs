@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using EchoPlayAPI.Data;
 using EchoPlayAPI.Models;
 using EchoPlayAPI.DTOs;
@@ -9,6 +10,7 @@ namespace EchoPlayAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class FavoritesController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -18,23 +20,30 @@ namespace EchoPlayAPI.Controllers
             _context = context;
         }
 
+        private int GetCurrentUserId()
+        {
+            var emailClaim = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(emailClaim))
+                return 0;
+
+            var user = _context.Users.FirstOrDefault(u => u.Email == emailClaim);
+            return user?.Id ?? 0;
+        }
+
         // GET: api/favorites/summary
         [HttpGet("summary")]
-        public async Task<ActionResult<FavoritesSummaryResponse>> GetFavoritesSummary([FromQuery] string email)
+        public async Task<ActionResult<FavoritesSummaryResponse>> GetFavoritesSummary()
         {
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("Email is required");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-            if (user == null)
-                return NotFound("User not found");
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+                return BadRequest("User ID is required");
 
             var favorites = await _context.Favorites
-                .Where(f => f.UserId == user.Id)
+                .Where(f => f.UserId == userId)
                 .ToListAsync();
 
             var categories = await _context.FavoriteCategories
-                .Where(c => c.UserId == user.Id)
+                .Where(c => c.UserId == userId)
                 .Include(c => c.Favorites)
                 .ToListAsync();
 
@@ -62,20 +71,16 @@ namespace EchoPlayAPI.Controllers
         // GET: api/favorites
         [HttpGet]
         public async Task<ActionResult<List<FavoriteResponse>>> GetFavorites(
-            [FromQuery] string email,
             [FromQuery] FavoriteEntityType? entityType = null,
             [FromQuery] int? categoryId = null,
             [FromQuery] bool grouped = false)
         {
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("Email is required");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-            if (user == null)
-                return NotFound("User not found");
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+                return BadRequest("User ID is required");
 
             var query = _context.Favorites
-                .Where(f => f.UserId == user.Id);
+                .Where(f => f.UserId == userId);
 
             if (entityType.HasValue)
                 query = query.Where(f => f.EntityType == entityType.Value);
@@ -115,17 +120,14 @@ namespace EchoPlayAPI.Controllers
 
         // GET: api/favorites/grouped
         [HttpGet("grouped")]
-        public async Task<ActionResult<List<FavoritesGroupedResponse>>> GetFavoritesGrouped([FromQuery] string email)
+        public async Task<ActionResult<List<FavoritesGroupedResponse>>> GetFavoritesGrouped()
         {
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("Email is required");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-            if (user == null)
-                return NotFound("User not found");
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+                return Unauthorized("User not found");
 
             var favorites = await _context.Favorites
-                .Where(f => f.UserId == user.Id)
+                .Where(f => f.UserId == userId)
                 .Include(f => f.Category)
                 .OrderByDescending(f => f.CreatedAt)
                 .ToListAsync();
@@ -164,27 +166,24 @@ namespace EchoPlayAPI.Controllers
 
         // POST: api/favorites
         [HttpPost]
-        public async Task<ActionResult<FavoriteResponse>> AddFavorite([FromQuery] string email, [FromBody] AddFavoriteRequest request)
+        public async Task<ActionResult<FavoriteResponse>> AddFavorite([FromBody] AddFavoriteRequest request)
         {
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("Email is required");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-            if (user == null)
-                return NotFound("User not found");
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+                return Unauthorized("User not found");
 
             // Check if category exists (if provided)
             if (request.CategoryId.HasValue)
             {
                 var categoryExists = await _context.FavoriteCategories
-                    .AnyAsync(c => c.Id == request.CategoryId.Value && c.UserId == user.Id);
+                    .AnyAsync(c => c.Id == request.CategoryId.Value && c.UserId == userId);
                 if (!categoryExists)
                     return BadRequest("Category not found or doesn't belong to user");
             }
 
             // Check for duplicate
             var existingFavorite = await _context.Favorites
-                .FirstOrDefaultAsync(f => f.UserId == user.Id 
+                .FirstOrDefaultAsync(f => f.UserId == userId 
                                        && f.EntityType == request.EntityType 
                                        && f.SpotifyId == request.SpotifyId);
 
@@ -193,7 +192,7 @@ namespace EchoPlayAPI.Controllers
 
             var favorite = new Favorite
             {
-                UserId = user.Id,
+                UserId = userId,
                 EntityType = request.EntityType,
                 SpotifyId = request.SpotifyId,
                 EntityName = request.EntityName,
@@ -238,22 +237,19 @@ namespace EchoPlayAPI.Controllers
                 } : null
             };
 
-            return CreatedAtAction(nameof(GetFavorites), new { email = user.Email }, response);
+            return CreatedAtAction(nameof(GetFavorites), null, response);
         }
 
         // DELETE: api/favorites/{id}
         [HttpDelete("{id}")]
-        public async Task<IActionResult> RemoveFavorite(int id, [FromQuery] string email)
+        public async Task<IActionResult> RemoveFavorite(int id)
         {
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("Email is required");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-            if (user == null)
-                return NotFound("User not found");
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+                return Unauthorized("User not found");
 
             var favorite = await _context.Favorites
-                .FirstOrDefaultAsync(f => f.Id == id && f.UserId == user.Id);
+                .FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
 
             if (favorite == null)
                 return NotFound("Favorite not found");
@@ -266,17 +262,14 @@ namespace EchoPlayAPI.Controllers
 
         // PUT: api/favorites/{id}/move
         [HttpPut("{id}/move")]
-        public async Task<IActionResult> MoveFavorite(int id, [FromQuery] string email, [FromBody] MoveFavoriteRequest request)
+        public async Task<IActionResult> MoveFavorite(int id, [FromBody] MoveFavoriteRequest request)
         {
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("Email is required");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-            if (user == null)
-                return NotFound("User not found");
+            var userId = GetCurrentUserId();
+            if (userId == 0)
+                return Unauthorized("User not found");
 
             var favorite = await _context.Favorites
-                .FirstOrDefaultAsync(f => f.Id == id && f.UserId == user.Id);
+                .FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
 
             if (favorite == null)
                 return NotFound("Favorite not found");
@@ -285,7 +278,7 @@ namespace EchoPlayAPI.Controllers
             if (request.CategoryId.HasValue)
             {
                 var categoryExists = await _context.FavoriteCategories
-                    .AnyAsync(c => c.Id == request.CategoryId.Value && c.UserId == user.Id);
+                    .AnyAsync(c => c.Id == request.CategoryId.Value && c.UserId == userId);
                 if (!categoryExists)
                     return BadRequest("Category not found or doesn't belong to user");
             }
