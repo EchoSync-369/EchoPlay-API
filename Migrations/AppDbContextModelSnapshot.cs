@@ -140,6 +140,35 @@ namespace EchoPlay_API.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("EchoPlayAPI.Models.UserSearchHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Query")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserSearchHistories");
+                });
+
             modelBuilder.Entity("EchoPlayAPI.Models.Favorite", b =>
                 {
                     b.HasOne("EchoPlayAPI.Models.FavoriteCategory", "Category")
@@ -172,6 +201,7 @@ namespace EchoPlay_API.Migrations
             modelBuilder.Entity("EchoPlayAPI.Models.FavoriteCategory", b =>
                 {
                     b.Navigation("Favorites");
+
                 });
 #pragma warning restore 612, 618
         }
