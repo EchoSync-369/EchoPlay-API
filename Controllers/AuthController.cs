@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Security.Claims;
 using EchoPlayAPI.Services;
 using EchoPlayAPI.Data;
 using EchoPlayAPI.Models;
@@ -62,7 +64,34 @@ namespace EchoPlayAPI.Controllers
             
             return Ok(new { IsAdmin = user.IsAdmin, profile = json, token = jwtToken });
         }
-        
+
+        [HttpPost("logout")]
+        [Authorize]
+        public IActionResult Logout()
+        {
+            try
+            {
+                // Get user email from JWT claims
+                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+                
+                if (string.IsNullOrEmpty(userEmail))
+                {
+                    return BadRequest("Invalid token");
+                }
+
+                // In a production environment, you might want to:
+                // 1. Add the JWT to a blacklist/revocation list
+                // 2. Store revoked tokens in a cache or database
+                // 3. Use shorter token expiration times
+                
+                // For now, we'll just return success since the client will remove the token
+                return Ok(new { message = "Logout successful", email = userEmail });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Logout failed", error = ex.Message });
+            }
+        }
     }
 
     public class TokenRequest
