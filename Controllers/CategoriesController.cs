@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using EchoPlayAPI.Data;
 using EchoPlayAPI.Models;
 using EchoPlayAPI.DTOs;
@@ -8,6 +10,7 @@ namespace EchoPlayAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class CategoriesController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -17,16 +20,22 @@ namespace EchoPlayAPI.Controllers
             _context = context;
         }
 
+        private async Task<User?> GetCurrentUserId()
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return null;
+
+            return await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        }
+
         // GET: api/categories
         [HttpGet]
-        public async Task<ActionResult<List<CategoryResponse>>> GetCategories([FromQuery] string email)
+        public async Task<ActionResult<List<CategoryResponse>>> GetCategories()
         {
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("Email is required");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await GetCurrentUserId();
             if (user == null)
-                return NotFound("User not found");
+                return Unauthorized("User not found");
 
             var categories = await _context.FavoriteCategories
                 .Where(c => c.UserId == user.Id)
@@ -49,14 +58,11 @@ namespace EchoPlayAPI.Controllers
 
         // GET: api/categories/{id}
         [HttpGet("{id}")]
-        public async Task<ActionResult<CategoryResponse>> GetCategory(int id, [FromQuery] string email)
+        public async Task<ActionResult<CategoryResponse>> GetCategory(int id)
         {
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("Email is required");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await GetCurrentUserId();
             if (user == null)
-                return NotFound("User not found");
+                return Unauthorized("User not found");
 
             var category = await _context.FavoriteCategories
                 .Where(c => c.Id == id && c.UserId == user.Id)
@@ -81,14 +87,11 @@ namespace EchoPlayAPI.Controllers
 
         // POST: api/categories
         [HttpPost]
-        public async Task<ActionResult<CategoryResponse>> CreateCategory([FromQuery] string email, [FromBody] CreateCategoryRequest request)
+        public async Task<ActionResult<CategoryResponse>> CreateCategory([FromBody] CreateCategoryRequest request)
         {
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("Email is required");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await GetCurrentUserId();
             if (user == null)
-                return NotFound("User not found");
+                return Unauthorized("User not found");
 
             // Check if category name already exists for this user
             var existingCategory = await _context.FavoriteCategories
@@ -119,19 +122,16 @@ namespace EchoPlayAPI.Controllers
                 FavoritesCount = 0
             };
 
-            return CreatedAtAction(nameof(GetCategory), new { id = category.Id, email = user.Email }, response);
+            return CreatedAtAction(nameof(GetCategory), new { id = category.Id }, response);
         }
 
         // PUT: api/categories/{id}
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateCategory(int id, [FromQuery] string email, [FromBody] UpdateCategoryRequest request)
+        public async Task<IActionResult> UpdateCategory(int id, [FromBody] UpdateCategoryRequest request)
         {
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("Email is required");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await GetCurrentUserId();
             if (user == null)
-                return NotFound("User not found");
+                return Unauthorized("User not found");
 
             var category = await _context.FavoriteCategories
                 .FirstOrDefaultAsync(c => c.Id == id && c.UserId == user.Id);
@@ -157,14 +157,11 @@ namespace EchoPlayAPI.Controllers
 
         // DELETE: api/categories/{id}
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteCategory(int id, [FromQuery] string email, [FromQuery] bool moveFavoritesToUncategorized = true)
+        public async Task<IActionResult> DeleteCategory(int id, [FromQuery] bool moveFavoritesToUncategorized = true)
         {
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("Email is required");
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await GetCurrentUserId();
             if (user == null)
-                return NotFound("User not found");
+                return Unauthorized("User not found");
 
             var category = await _context.FavoriteCategories
                 .Where(c => c.Id == id && c.UserId == user.Id)
