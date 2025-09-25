@@ -36,10 +36,23 @@ namespace EchoPlayAPI.Controllers
             if (string.IsNullOrWhiteSpace(dto.Query) || userId == 0)
                 return BadRequest();
 
+            // Deduplicate: check if a search with the same query (case-insensitive) already exists for this user
+            var existing = _context.UserSearchHistories
+                .FirstOrDefault(h => h.UserId == userId && h.Query.ToLower() == dto.Query.Trim().ToLower());
+
+            if (existing != null)
+            {
+                // Optionally update the timestamp to move it to the top
+                existing.UpdatedAt = DateTime.UtcNow;
+                existing.CreatedAt = DateTime.UtcNow;
+                _context.SaveChanges();
+                return Ok(existing);
+            }
+
             var entry = new UserSearchHistory
             {
                 UserId = userId,
-                Query = dto.Query,
+                Query = dto.Query.Trim(),
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -83,6 +96,17 @@ namespace EchoPlayAPI.Controllers
                 .ToList();
 
             return Ok(searches);
+        }
+
+        [HttpDelete("{id:int}")]
+        public IActionResult DeleteSearch(int id)
+        {
+            var userId = GetCurrentUserId();
+            var entry = _context.UserSearchHistories.FirstOrDefault(h => h.Id == id && h.UserId == userId);
+            if (entry == null) return NotFound();
+            _context.UserSearchHistories.Remove(entry);
+            _context.SaveChanges();
+            return NoContent();
         }
     }
 
