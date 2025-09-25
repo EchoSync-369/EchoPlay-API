@@ -40,10 +40,10 @@ namespace EchoPlayAPI.Controllers
 
             // Extract email from the Spotify user profile response
             var email = json.GetProperty("email").GetString();
-            
+
             if (string.IsNullOrEmpty(email))
                 return BadRequest("User email not found in Spotify profile");
-            
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
 
             if (user == null)
@@ -58,10 +58,10 @@ namespace EchoPlayAPI.Controllers
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
             }
-            
+
             // Generate JWT token with the user's email
             var jwtToken = _jwtService.GenerateToken(email);
-            
+
             return Ok(new { IsAdmin = user.IsAdmin, profile = json, token = jwtToken });
         }
 
